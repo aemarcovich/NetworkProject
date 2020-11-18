@@ -1,0 +1,12 @@
+{
+	"Server IP Address": "192.168.137.129",
+	"Source Port Number UDP":  9876,
+	"Destination Port Number for UDP":  8765,
+	"Destination Port Number for TCP Head SYN, x": 3490,
+	"Destination Port Number for TCP Tail SYN, y": 3490,
+	"Port Number for TCP (Pre-/Post- Probing Phases)": 3490,
+	"The Size of the UDP Payload in the UDP Packet Train": 1000,
+	"Inter-Measurement Time, γ (default value: 15 seconds)" 15,
+	"The Number of UDP Packets in the UDP Packet Train, n": 6000,
+	"TTL for the UDP Packets": 255
+}
