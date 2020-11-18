@@ -10,12 +10,24 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <time.h>
 
 #define PORT "3490" // the port users will be connecting to
 
 #define BACKLOG 10 // how many pending connections queue will hold
-#define MAXDATASIZE 1024 // max number of bytes we can get at once
-
+#define MAXDATASIZE 1000 // max number of bytes we can get at once
+int UDP_packet=6000; //Match with client's
+char serverip[MAXDATASIZE];
+int sport;
+int dport;
+int dport_tcp;
+int dport_tcp_t;
+char tcpport[MAXDATASIZE];
+int udpsize;
+int intertime;
+int TTL;
+char buffer[MAXDATASIZE]={0};
+double time_taken;
 void sigchld_handler(int s)
 {
 // waitpid() might overwrite errno, so we save and restore it:
@@ -36,73 +48,115 @@ void *get_in_addr(struct sockaddr *sa)
 
 	return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
-void udp_server(){
-	int port = 8765;
-  	int sockfd;
-  	struct sockaddr_in si_me, si_other;
-  	char buffer[1024];
-  	socklen_t addr_size;
-
-  	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-
-  	memset(&si_other, '\0', sizeof(si_me));
-  	si_other.sin_family = AF_INET;
-  	si_other.sin_port = htons(9876);
-  	si_other.sin_addr.s_addr = inet_addr("192.168.137.128");
-
-
-  	memset(&si_me, '\0', sizeof(si_me));
-  	si_me.sin_family = AF_INET;
-  	si_me.sin_port = htons(port);
-  	si_me.sin_addr.s_addr = inet_addr("192.168.137.129");
-
-  	bind(sockfd, (struct sockaddr*)&si_me, sizeof(si_me));
-  	addr_size = sizeof(si_other);
-
-  	if(recvfrom(sockfd, buffer, 1024, 0,(struct sockaddr*)& si_other, &addr_size) < 0);{
-  		perror("Error udp received\n");
-  	}
-  	printf("test\n");
-  	printf("[+]Data Received: %s\n", buffer);
-  	sendto(sockfd, buffer, 1024, 0,(struct sockaddr*)& si_other,addr_size);
-  	printf("[+]Data Send: %s", buffer);
-  	//for(int t=0; t<6000; t++)
-   //  {
-   //  	if(recvfrom(sockfd, buffer, 1024, 0,(struct sockaddr*)& si_other, &addr_size)< 0){
-   //  		printf("check\n");
-   //  	}
-   //  }
-   //  printf("data sent\n");
+double stopWatch(int sockfd,struct sockaddr_in* si_other,socklen_t* addr_size)
+{
+	clock_t start,end;
+	start=clock();
+  	for(int t=0; t<UDP_packet; t++)
+    {
+    	if(recvfrom(sockfd, buffer, 1000, 0,(struct sockaddr*) si_other, addr_size)< 0){
+    		printf("check\n");
+    	}
+    	uint16_t packid= *((uint16_t*) buffer);
+    	//printf("%d: %hu\n",t , packid);
+    	if(packid==UDP_packet-1){
+    		break;
+    	}
+    }
+    end=clock();
+    //time in seconds
+    return ((double) (end-start))/ CLOCKS_PER_SEC;
 }
-void write_file(int sockfd)
+void udp_server(){
+	//int port = 8765;
+	int sockfd;
+	struct sockaddr_in si_me, si_other;
+	char buffer[udpsize];
+	socklen_t addr_size;
+
+	clock_t start,end;
+
+	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+	//destination
+	memset(&si_other, '\0', sizeof(si_me));
+	si_other.sin_family = AF_INET;
+	si_other.sin_port = htons(dport);
+	si_other.sin_addr.s_addr = inet_addr("192.168.137.128");
+
+	//soruce
+	memset(&si_me, '\0', sizeof(si_me));
+	si_me.sin_family = AF_INET;
+	si_me.sin_port = htons(sport);
+	si_me.sin_addr.s_addr = inet_addr(serverip);
+
+	bind(sockfd, (struct sockaddr*)&si_me, sizeof(si_me));
+	addr_size = sizeof(si_other);
+
+	double lowEntorpy=stopWatch(sockfd, &si_other, &addr_size);
+    printf("data sent time_taken for lowEntorpy: %f\n",lowEntorpy);
+    double highEntorpy=stopWatch(sockfd, &si_other, &addr_size);
+    printf("data sent time_taken for highEntorpy: %f\n",highEntorpy);
+    time_taken=highEntorpy-lowEntorpy;
+
+
+}
+void setvar(){
+  char local_data[MAXDATASIZE]={0};
+  char* token;
+  strcpy(local_data,buffer);
+  char* rest =local_data;
+  int line=0;
+  while(token=strtok_r(rest,"\n",&rest)){
+    if(line==0)
+      strcpy(serverip,token);
+    else if(line==1)
+      dport=atoi(token);
+    else if(line==2)
+      sport=atoi(token);
+    else if(line==3)
+      dport_tcp=atoi(token);
+     else if(line==4)
+      dport_tcp_t=atoi(token);
+     else if(line==5)
+      strcpy(tcpport,token);
+     else if(line==6)
+      udpsize=atoi(token);
+     else if(line==7)
+      intertime=atoi(token);
+     else if(line==8)
+      UDP_packet=atoi(token);
+     else if(line==9)
+      TTL=atoi(token);
+    //printf("%s\n",serverip );
+    line++;
+  }
+}
+void write_file(int sockfd, FILE* fp)
 {
 	int n;
-	FILE *fp;
-	char *filename ="test2.txt";
-	char buffer[MAXDATASIZE];
 
-	fp= fopen(filename,"w");
-	if(fp==NULL){
-		perror("error with create file");
-		exit(1);
-	}
-	while (1){
 		n= recv(sockfd,buffer,MAXDATASIZE,0);
-		if(n <= 0){
-			break;
-			return;
-		}
-		printf("%s\n", buffer);
+		setvar();
+		printf("file received\n%s\n", buffer);
 		fprintf(fp, "%s", buffer);
-		printf("File created.\n");
-		udp_server();
+		//dp_server();
 		bzero(buffer, MAXDATASIZE);
-	}
-
-	//printf("File created.\n");
 	return;
 }
 
+void send_value(int sockfd)
+{
+	char message[1000];
+	int n=recv(sockfd,message,MAXDATASIZE,0);
+	printf("%s\n",message);
+	//setting time taken to be sent.
+	char arr[sizeof(time_taken)];
+	printf("%f\n",time_taken);
+	snprintf(arr, 1000, "%f", time_taken);
+	send(sockfd,arr,MAXDATASIZE,0);
+	printf("number char sent\n");
+
+}
 
 int main(void)
 {
@@ -114,11 +168,14 @@ struct sigaction sa;
 int yes=1;
 char s[INET6_ADDRSTRLEN];
 int rv;
+FILE *fp;
+char *filename ="test2.txt";
 
 memset(&hints, 0, sizeof hints);
 hints.ai_family = AF_UNSPEC;
 hints.ai_socktype = SOCK_STREAM;
 hints.ai_flags = AI_PASSIVE; // use my IP
+
 
 
 if ((rv = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0) {
@@ -171,12 +228,11 @@ if (sigaction(SIGCHLD, &sa, NULL) == -1) {
 
 printf("server: waiting for connections...\n");
 
-while(1) { // main accept() loop
+ // main accept() loop
 	sin_size = sizeof their_addr;
 	new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
 	if (new_fd == -1) {
 		perror("accept");
-		continue;
 	}
 
 	inet_ntop(their_addr.ss_family,
@@ -186,24 +242,27 @@ while(1) { // main accept() loop
 
 if (!fork()) { // this is the child process
 close(sockfd); // child doesn't need the listener
-if (send(new_fd, "Hello, world!", 13, 0) == -1)
+if (send(new_fd, "chat ended", 10, 0) == -1)
 	perror("send");
 //printf(" data received: %s\n", buffer);
 close(new_fd);
 exit(0);
 }
-
-// write_file(new_fd);
-printf("File created.\n");
+fp= fopen(filename,"w");
+if(fp==NULL){
+	perror("error with create file");
+	exit(1);
+}
+write_file(new_fd, fp);
+fclose(fp);
+printf("Incoming packets.\n");
 
 udp_server();
-// hints.ai_socktype = SOCK_DGRAM;
-//sockfd = socket(p->ai_family, SOCK_DGRAM,p->ai_protocol);
-// new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
 
-//close(sockfd);
+send_value(new_fd);
+
 close(new_fd); // parent doesn't need this
-}
+
 
 
 return 0;
